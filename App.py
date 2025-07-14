@@ -27,7 +27,7 @@ try:
     st.success("✅ Gemini API Key loaded from secrets successfully!")
 except:
     # วิธีที่ 2: ใส่ API Key ตรงนี้ (สำรอง)
-    GEMINI_API_KEY = "AIzaSyDhcBaFpk3YqRJtb6kLfQhbJSnGoklha8o"  # ← ใส่ API Key ของคุณตรงนี้
+    GEMINI_API_KEY = "AIzaSyANjCc-PtzNhNqq27ow2SnyP1Pl96g0BJ8"  # ← ใส่ API Key ของคุณตรงนี้
     if GEMINI_API_KEY == "YOUR_API_KEY_HERE":
         st.error("❌ กรุณาใส่ Gemini API Key ในไฟล์หรือใน Secrets")
         st.stop()
