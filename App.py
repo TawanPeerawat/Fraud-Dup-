@@ -1,5 +1,4 @@
 import streamlit as st
-import cv2
 import numpy as np
 from PIL import Image
 import base64
@@ -12,6 +11,14 @@ import torchvision.transforms as transforms
 from torchvision.models import resnet50
 import json
 import google.generativeai as genai
+
+# Try to import cv2 with error handling
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    st.warning("OpenCV not available. Some features may be limited.")
 
 # อ่าน API Key จาก Streamlit secrets
 try:
@@ -34,14 +41,25 @@ def image_to_base64(image):
 
 # ฟังก์ชันสำหรับคำนวณความเหมือนด้วย SSIM
 def calculate_ssim(img1, img2):
-    # แปลงเป็น grayscale
-    gray1 = cv2.cvtColor(np.array(img1), cv2.COLOR_RGB2GRAY)
-    gray2 = cv2.cvtColor(np.array(img2), cv2.COLOR_RGB2GRAY)
-    
-    # ปรับขนาดให้เท่ากัน
-    h, w = min(gray1.shape[0], gray2.shape[0]), min(gray1.shape[1], gray2.shape[1])
-    gray1 = cv2.resize(gray1, (w, h))
-    gray2 = cv2.resize(gray2, (w, h))
+    if CV2_AVAILABLE:
+        # แปลงเป็น grayscale ด้วย cv2
+        gray1 = cv2.cvtColor(np.array(img1), cv2.COLOR_RGB2GRAY)
+        gray2 = cv2.cvtColor(np.array(img2), cv2.COLOR_RGB2GRAY)
+        
+        # ปรับขนาดให้เท่ากัน
+        h, w = min(gray1.shape[0], gray2.shape[0]), min(gray1.shape[1], gray2.shape[1])
+        gray1 = cv2.resize(gray1, (w, h))
+        gray2 = cv2.resize(gray2, (w, h))
+    else:
+        # ใช้ PIL แทน cv2
+        gray1 = np.array(img1.convert('L'))
+        gray2 = np.array(img2.convert('L'))
+        
+        # ปรับขนาดให้เท่ากัน
+        h, w = min(gray1.shape[0], gray2.shape[0]), min(gray1.shape[1], gray2.shape[1])
+        from PIL import Image as PILImage
+        gray1 = np.array(PILImage.fromarray(gray1).resize((w, h)))
+        gray2 = np.array(PILImage.fromarray(gray2).resize((w, h)))
     
     # คำนวณ SSIM
     similarity_score = ssim(gray1, gray2)
