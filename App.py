@@ -13,8 +13,11 @@ from torchvision.models import resnet50
 import json
 import google.generativeai as genai
 
-# ⚠️ ใส่ Gemini API Key ของคุณที่นี่
-GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"
+# อ่าน API Key จาก Streamlit secrets
+try:
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+except KeyError:
+    GEMINI_API_KEY = None
 
 # กำหนดค่า Streamlit
 st.set_page_config(
@@ -80,8 +83,8 @@ def calculate_deep_similarity(img1, img2, model):
 def get_ai_analysis(image1, image2, ssim_score, deep_score):
     try:
         # ตรวจสอบ API Key
-        if GEMINI_API_KEY == "AIzaSyDhcBaFpk3YqRJtb6kLfQhbJSnGoklha8o":
-            st.error("⚠️ กรุณาใส่ Gemini API Key ในไฟล์ app.py บรรทัดที่ 14")
+        if not GEMINI_API_KEY:
+            st.error("⚠️ กรุณาตั้งค่า Gemini API Key ในการตั้งค่า Streamlit Cloud")
             return get_fallback_response(ssim_score, deep_score)
         
         # กำหนดค่า Gemini API
@@ -153,16 +156,18 @@ def main():
     st.markdown("### ตรวจสอบความเหมือนของรูปภาพด้วย AI")
     
     # แสดงสถานะ API Key
-    if GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
-        st.warning("⚠️ กรุณาใส่ Gemini API Key ในไฟล์ app.py บรรทัดที่ 14")
-        with st.expander("📝 วิธีการใส่ API Key"):
-            st.code('''
-# แก้ไขบรรทัดที่ 14 ในไฟล์ app.py
-GEMINI_API_KEY = "ใส่_API_KEY_ของคุณ_ที่นี่"
-
-# ตัวอย่าง
-GEMINI_API_KEY = "AIzaSyABC123XYZ..."
-            ''', language='python')
+    if not GEMINI_API_KEY:
+        st.warning("⚠️ กรุณาตั้งค่า Gemini API Key ในการตั้งค่า Streamlit Cloud")
+        with st.expander("📝 วิธีการตั้งค่า API Key"):
+            st.markdown("""
+            1. ไปที่การตั้งค่าแอป (Settings)
+            2. เลือก "Secrets"
+            3. เพิ่มข้อมูลนี้:
+            ```
+            GEMINI_API_KEY = "ใส่_API_KEY_ของคุณ_ที่นี่"
+            ```
+            4. บันทึกและรีสตาร์ทแอป
+            """)
     else:
         st.success("✅ Gemini API Key ตั้งค่าแล้ว")
     
@@ -184,19 +189,8 @@ GEMINI_API_KEY = "AIzaSyABC123XYZ..."
         1. ไปที่ [Google AI Studio](https://aistudio.google.com/)
         2. คลิก "Get API Key"
         3. สร้าง API Key ใหม่
-        4. Copy API Key ไปแทนที่ในไฟล์ app.py บรรทัดที่ 14
+        4. นำไปใส่ในการตั้งค่า Streamlit Cloud
         """)
-    
-    # วิธีการใส่ API Key
-    with st.sidebar.expander("🔧 วิธีการใส่ API Key"):
-        st.code('''
-# เปิดไฟล์ app.py
-# หาบรรทัดที่ 14
-GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"
-
-# เปลี่ยนเป็น
-GEMINI_API_KEY = "AIzaSyABC123..."
-        ''', language='python')
     
     # File uploaders
     col1, col2 = st.columns(2)
