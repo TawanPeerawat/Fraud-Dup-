@@ -151,7 +151,7 @@ def main():
     
     # API Key input
     api_key = st.sidebar.text_input(
-        "AIzaSyDhcBaFpk3YqRJtb6kLfQhbJSnGoklha8o",
+        "🔑 Gemini API Key",
         type="password",
         help="ใส่ Google AI Studio API Key ของคุณ"
     )
@@ -172,7 +172,7 @@ def main():
     
     # ตรวจสอบ API Key
     if not api_key:
-        st.sidebar.warning("⚠️ กรุณาใส่ Gemini API Key เพื่อใช้งาน AI Analysis")
+        st.sidebar.warning("AIzaSyDhcBaFpk3YqRJtb6kLfQhbJSnGoklha8o")
     else:
         st.sidebar.success("✅ API Key ถูกต้อง")
     
