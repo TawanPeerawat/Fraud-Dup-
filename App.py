@@ -3,22 +3,7 @@ import numpy as np
 from PIL import Image
 import base64
 import io
-import requests
-from skimage.metrics import structural_similarity as ssim
-from sklearn.metrics.pairwise import cosine_similarity
-import torch
-import torchvision.transforms as transforms
-from torchvision.models import resnet50
-import json
 import google.generativeai as genai
-
-# Try to import cv2 with error handling
-try:
-    import cv2
-    CV2_AVAILABLE = True
-except ImportError:
-    CV2_AVAILABLE = False
-    st.warning("OpenCV not available. Some features may be limited.")
 
 # อ่าน API Key จาก Streamlit secrets
 try:
@@ -33,77 +18,64 @@ st.set_page_config(
     layout="wide"
 )
 
-# ฟังก์ชันสำหรับแปลงรูปภาพเป็น base64
-def image_to_base64(image):
-    buffered = io.BytesIO()
-    image.save(buffered, format="PNG")
-    return base64.b64encode(buffered.getvalue()).decode()
-
-# ฟังก์ชันสำหรับคำนวณความเหมือนด้วย SSIM
-def calculate_ssim(img1, img2):
-    if CV2_AVAILABLE:
-        # แปลงเป็น grayscale ด้วย cv2
-        gray1 = cv2.cvtColor(np.array(img1), cv2.COLOR_RGB2GRAY)
-        gray2 = cv2.cvtColor(np.array(img2), cv2.COLOR_RGB2GRAY)
-        
-        # ปรับขนาดให้เท่ากัน
-        h, w = min(gray1.shape[0], gray2.shape[0]), min(gray1.shape[1], gray2.shape[1])
-        gray1 = cv2.resize(gray1, (w, h))
-        gray2 = cv2.resize(gray2, (w, h))
-    else:
-        # ใช้ PIL แทน cv2
-        gray1 = np.array(img1.convert('L'))
-        gray2 = np.array(img2.convert('L'))
-        
-        # ปรับขนาดให้เท่ากัน
-        h, w = min(gray1.shape[0], gray2.shape[0]), min(gray1.shape[1], gray2.shape[1])
-        from PIL import Image as PILImage
-        gray1 = np.array(PILImage.fromarray(gray1).resize((w, h)))
-        gray2 = np.array(PILImage.fromarray(gray2).resize((w, h)))
+# ฟังก์ชันคำนวณความเหมือนแบบง่าย (Histogram Comparison)
+def calculate_histogram_similarity(img1, img2):
+    """คำนวณความเหมือนจาก histogram ของสี"""
+    # แปลงเป็น array
+    arr1 = np.array(img1)
+    arr2 = np.array(img2)
     
-    # คำนวณ SSIM
-    similarity_score = ssim(gray1, gray2)
-    return similarity_score
-
-# ฟังก์ชันสำหรับแยก features ด้วย ResNet
-@st.cache_resource
-def load_feature_extractor():
-    model = resnet50(pretrained=True)
-    model.eval()
-    # เอาเฉพาะ feature extractor (ไม่รวม classifier)
-    feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
-    return feature_extractor
-
-def extract_features(image, model):
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    # ปรับขนาดให้เหมือนกัน
+    if arr1.shape != arr2.shape:
+        img2_resized = img2.resize(img1.size)
+        arr2 = np.array(img2_resized)
     
-    with torch.no_grad():
-        image_tensor = transform(image).unsqueeze(0)
-        features = model(image_tensor)
-        features = features.flatten().numpy()
+    # คำนวณ histogram สำหรับแต่ละ channel
+    hist1_r = np.histogram(arr1[:,:,0], bins=50, range=(0, 255))[0]
+    hist1_g = np.histogram(arr1[:,:,1], bins=50, range=(0, 255))[0]
+    hist1_b = np.histogram(arr1[:,:,2], bins=50, range=(0, 255))[0]
     
-    return features
+    hist2_r = np.histogram(arr2[:,:,0], bins=50, range=(0, 255))[0]
+    hist2_g = np.histogram(arr2[:,:,1], bins=50, range=(0, 255))[0]
+    hist2_b = np.histogram(arr2[:,:,2], bins=50, range=(0, 255))[0]
+    
+    # คำนวณ correlation coefficient
+    corr_r = np.corrcoef(hist1_r, hist2_r)[0,1]
+    corr_g = np.corrcoef(hist1_g, hist2_g)[0,1]
+    corr_b = np.corrcoef(hist1_b, hist2_b)[0,1]
+    
+    # เฉลี่ยของ 3 channels
+    similarity = (corr_r + corr_g + corr_b) / 3
+    
+    # จัดการ NaN values
+    if np.isnan(similarity):
+        similarity = 0.0
+    
+    return max(0, similarity)  # ให้อยู่ในช่วง 0-1
 
-# ฟังก์ชันสำหรับคำนวณความเหมือนด้วย Deep Learning
-def calculate_deep_similarity(img1, img2, model):
-    features1 = extract_features(img1, model)
-    features2 = extract_features(img2, model)
+# ฟังก์ชันคำนวณความเหมือนจาก pixel values
+def calculate_pixel_similarity(img1, img2):
+    """คำนวณความเหมือนจาก pixel values โดยตรง"""
+    # แปลงเป็น array และปรับขนาด
+    arr1 = np.array(img1)
+    arr2 = np.array(img2.resize(img1.size))
     
-    # คำนวณ cosine similarity
-    similarity = cosine_similarity([features1], [features2])[0][0]
-    return similarity
+    # คำนวณ Mean Squared Error
+    mse = np.mean((arr1 - arr2) ** 2)
+    
+    # แปลงเป็น similarity score (0-1)
+    max_possible_mse = 255 ** 2
+    similarity = 1 - (mse / max_possible_mse)
+    
+    return max(0, similarity)
 
 # ฟังก์ชันสำหรับเรียก Gemini API
-def get_ai_analysis(image1, image2, ssim_score, deep_score):
+def get_ai_analysis(image1, image2, hist_score, pixel_score):
     try:
         # ตรวจสอบ API Key
         if not GEMINI_API_KEY:
             st.error("⚠️ กรุณาตั้งค่า Gemini API Key ในการตั้งค่า Streamlit Cloud")
-            return get_fallback_response(ssim_score, deep_score)
+            return get_fallback_response(hist_score, pixel_score)
         
         # กำหนดค่า Gemini API
         genai.configure(api_key=GEMINI_API_KEY)
@@ -116,13 +88,13 @@ def get_ai_analysis(image1, image2, ssim_score, deep_score):
         วิเคราะห์ความเหมือนของภาพทั้งสองนี้อย่างละเอียด:
         
         ผลการวิเคราะห์เบื้องต้น:
-        - SSIM Score: {ssim_score:.4f} ({ssim_score*100:.2f}%)
-        - Deep Learning Score: {deep_score:.4f} ({deep_score*100:.2f}%)
+        - Histogram Similarity: {hist_score:.4f} ({hist_score*100:.2f}%)
+        - Pixel Similarity: {pixel_score:.4f} ({pixel_score*100:.2f}%)
         
         กรุณาวิเคราะห์และอธิบายผลลัพธ์อย่างละเอียดว่า:
         1. ภาพทั้งสองเหมือนกันหรือไม่ และเหมือนกันกี่เปอร์เซ็นต์ตามการประเมินของคุณ
         2. จุดที่เหมือนกันและแตกต่างกันคืออะไร (สี, รูปร่าง, เนื้อหา, การจัดวาง)
-        3. เหตุผลที่ทำให้ได้คะแนน SSIM และ Deep Learning แบบนี้
+        3. เหตุผลที่ทำให้ได้คะแนนการวิเคราะห์แบบนี้
         4. ข้อจำกัดของการวิเคราะห์และคำแนะนำ
         5. สรุปผลการเปรียบเทียบแบบง่ายๆ
         
@@ -137,33 +109,35 @@ def get_ai_analysis(image1, image2, ssim_score, deep_score):
     except Exception as e:
         # ถ้าเกิดข้อผิดพลาดในการเรียก API ให้ใช้ fallback response
         st.error(f"ข้อผิดพลาดในการเรียก Gemini API: {str(e)}")
-        return get_fallback_response(ssim_score, deep_score)
+        return get_fallback_response(hist_score, pixel_score)
 
 # ฟังก์ชัน fallback response
-def get_fallback_response(ssim_score, deep_score):
+def get_fallback_response(hist_score, pixel_score):
+    overall_score = (hist_score + pixel_score) / 2
+    
     fallback_response = f"""
-    ## ⚠️ การวิเคราะห์ด้วยระบบพื้นฐาน
+    ## 📊 การวิเคราะห์ความเหมือนของภาพ
     
-    **ผลลัพธ์โดยรวม:** ภาพทั้งสองมีความเหมือนกัน **{((ssim_score + deep_score) / 2 * 100):.1f}%**
+    **ผลลัพธ์โดยรวม:** ภาพทั้งสองมีความเหมือนกัน **{overall_score*100:.1f}%**
     
-    ### 🔍 การวิเคราะห์เชิงโครงสร้าง (SSIM: {ssim_score*100:.1f}%)
-    - วิเคราะห์โครงสร้างพื้นฐาน ความสว่าง และความคมชัดของภาพ
-    - {"คะแนนสูง แสดงว่าภาพมีโครงสร้างคล้ายกันมาก" if ssim_score > 0.8 else "คะแนนปานกลาง อาจมีความแตกต่างในโครงสร้าง" if ssim_score > 0.5 else "คะแนนต่ำ ภาพมีโครงสร้างแตกต่างกันมาก"}
+    ### 🎨 การวิเคราะห์สี (Histogram: {hist_score*100:.1f}%)
+    - วิเคราะห์การกระจายของสีในภาพ
+    - {"คะแนนสูง แสดงว่าภาพมีโทนสีคล้ายกัน" if hist_score > 0.7 else "คะแนนปานกลาง สีในภาพค่อนข้างแตกต่าง" if hist_score > 0.3 else "คะแนนต่ำ ภาพมีสีที่แตกต่างกันมาก"}
     
-    ### 🧠 การวิเคราะห์เชิงลึก (Deep Learning: {deep_score*100:.1f}%)
-    - ใช้ AI วิเคราะห์เนื้อหาและรูปแบบเชิงลึก
-    - {"AI ตรวจจับว่าเนื้อหาภาพเหมือนกันมาก" if deep_score > 0.8 else "AI ตรวจจับความเหมือนปานกลาง" if deep_score > 0.5 else "AI ตรวจจับว่าเนื้อหาภาพแตกต่างกัน"}
+    ### 🖼️ การวิเคราะห์ Pixel (Pixel Similarity: {pixel_score*100:.1f}%)
+    - วิเคราะห์ความแตกต่างของ pixel แต่ละจุด
+    - {"คะแนนสูง แสดงว่าภาพมีรายละเอียดคล้ายกัน" if pixel_score > 0.7 else "คะแนนปานกลาง รายละเอียดค่อนข้างแตกต่าง" if pixel_score > 0.3 else "คะแนนต่ำ ภาพมีรายละเอียดที่แตกต่างกันมาก"}
     
-    ### 📊 สรุปผลการเปรียบเทียบ
-    - **ความเหมือนโดยรวม:** {((ssim_score + deep_score) / 2 * 100):.1f}%
-    - **ความเหมือนด้านโครงสร้าง:** {ssim_score*100:.1f}%
-    - **ความเหมือนด้านเนื้อหา:** {deep_score*100:.1f}%
+    ### 📈 สรุปผลการเปรียบเทียบ
+    - **ความเหมือนโดยรวม:** {overall_score*100:.1f}%
+    - **ความเหมือนด้านสี:** {hist_score*100:.1f}%
+    - **ความเหมือนด้านรายละเอียด:** {pixel_score*100:.1f}%
     
     ### 💡 คำแนะนำ
-    {"ภาพทั้งสองมีความเหมือนกันสูงมาก น่าจะเป็นภาพเดียวกันหรือภาพที่มีเนื้อหาเหมือนกันมาก" if (ssim_score + deep_score) / 2 > 0.8 else "ภาพมีความเหมือนปานกลาง อาจเป็นภาพเดียวกันที่ผ่านการแก้ไขหรือภาพที่คล้ายกัน" if (ssim_score + deep_score) / 2 > 0.5 else "ภาพทั้งสองแตกต่างกันมาก น่าจะเป็นภาพต่างกัน"}
+    {"ภาพทั้งสองมีความเหมือนกันสูงมาก น่าจะเป็นภาพเดียวกันหรือภาพที่มีเนื้อหาเหมือนกันมาก" if overall_score > 0.8 else "ภาพมีความเหมือนปานกลาง อาจเป็นภาพเดียวกันที่ผ่านการแก้ไขหรือภาพที่คล้ายกัน" if overall_score > 0.5 else "ภาพทั้งสองแตกต่างกันมาก น่าจะเป็นภาพต่างกัน"}
     
     ---
-    *หมายเหตุ: ไม่สามารถเชื่อมต่อกับ Gemini AI ได้ กรุณาตรวจสอบ API Key*
+    *หมายเหตุ: การวิเคราะห์นี้ใช้วิธีการพื้นฐาน เพื่อความแม่นยำมากขึ้นควรใช้ AI analysis*
     """
     
     return fallback_response
@@ -171,7 +145,7 @@ def get_fallback_response(ssim_score, deep_score):
 # Main App
 def main():
     st.title("🖼️ Image Similarity Checker with AI Analysis")
-    st.markdown("### ตรวจสอบความเหมือนของรูปภาพด้วย AI")
+    st.markdown("### ตรวจสอบความเหมือนของรูปภาพด้วย AI (เวอร์ชันง่าย)")
     
     # แสดงสถานะ API Key
     if not GEMINI_API_KEY:
@@ -189,16 +163,12 @@ def main():
     else:
         st.success("✅ Gemini API Key ตั้งค่าแล้ว")
     
-    # Load model
-    with st.spinner("กำลังโหลด AI Model..."):
-        feature_extractor = load_feature_extractor()
-    
     # Sidebar
     st.sidebar.header("ตัวเลือก")
     
     analysis_method = st.sidebar.selectbox(
         "เลือกวิธีการวิเคราะห์",
-        ["ทั้งหมด", "SSIM เท่านั้น", "Deep Learning เท่านั้น"]
+        ["ทั้งหมด", "Histogram เท่านั้น", "Pixel เท่านั้น"]
     )
     
     # วิธีการได้ API Key
@@ -208,6 +178,18 @@ def main():
         2. คลิก "Get API Key"
         3. สร้าง API Key ใหม่
         4. นำไปใส่ในการตั้งค่า Streamlit Cloud
+        """)
+    
+    # คำอธิบายวิธีการวิเคราะห์
+    with st.sidebar.expander("ℹ️ วิธีการวิเคราะห์"):
+        st.markdown("""
+        **Histogram Similarity:**
+        - วิเคราะห์การกระจายของสีในภาพ
+        - เหมาะสำหรับเปรียบเทียบโทนสี
+        
+        **Pixel Similarity:**
+        - เปรียบเทียบค่า pixel ตรงๆ
+        - เหมาะสำหรับภาพที่คล้ายกันมาก
         """)
     
     # File uploaders
@@ -245,16 +227,16 @@ def main():
         if st.button("🔍 วิเคราะห์ความเหมือน", type="primary"):
             with st.spinner("กำลังวิเคราะห์..."):
                 
-                ssim_score = None
-                deep_score = None
+                hist_score = None
+                pixel_score = None
                 
-                # คำนวณ SSIM
-                if analysis_method in ["ทั้งหมด", "SSIM เท่านั้น"]:
-                    ssim_score = calculate_ssim(image1, image2)
+                # คำนวณ Histogram similarity
+                if analysis_method in ["ทั้งหมด", "Histogram เท่านั้น"]:
+                    hist_score = calculate_histogram_similarity(image1, image2)
                 
-                # คำนวณ Deep Learning similarity
-                if analysis_method in ["ทั้งหมด", "Deep Learning เท่านั้น"]:
-                    deep_score = calculate_deep_similarity(image1, image2, feature_extractor)
+                # คำนวณ Pixel similarity
+                if analysis_method in ["ทั้งหมด", "Pixel เท่านั้น"]:
+                    pixel_score = calculate_pixel_similarity(image1, image2)
                 
                 # แสดงผลลัพธ์
                 st.subheader("📊 ผลการวิเคราะห์")
@@ -262,24 +244,24 @@ def main():
                 # แสดงคะแนน
                 col1, col2, col3 = st.columns(3)
                 
-                if ssim_score is not None:
+                if hist_score is not None:
                     with col1:
                         st.metric(
-                            "SSIM Score",
-                            f"{ssim_score:.4f}",
-                            f"{ssim_score*100:.2f}%"
+                            "Histogram Similarity",
+                            f"{hist_score:.4f}",
+                            f"{hist_score*100:.2f}%"
                         )
                 
-                if deep_score is not None:
+                if pixel_score is not None:
                     with col2:
                         st.metric(
-                            "Deep Learning Score",
-                            f"{deep_score:.4f}",
-                            f"{deep_score*100:.2f}%"
+                            "Pixel Similarity",
+                            f"{pixel_score:.4f}",
+                            f"{pixel_score*100:.2f}%"
                         )
                 
-                if ssim_score is not None and deep_score is not None:
-                    overall_score = (ssim_score + deep_score) / 2
+                if hist_score is not None and pixel_score is not None:
+                    overall_score = (hist_score + pixel_score) / 2
                     with col3:
                         st.metric(
                             "Overall Similarity",
@@ -288,12 +270,12 @@ def main():
                         )
                 
                 # Progress bars
-                if ssim_score is not None:
+                if hist_score is not None:
                     st.subheader("📈 Visual Progress")
-                    st.progress(ssim_score, text=f"SSIM: {ssim_score*100:.1f}%")
+                    st.progress(hist_score, text=f"Histogram: {hist_score*100:.1f}%")
                 
-                if deep_score is not None:
-                    st.progress(deep_score, text=f"Deep Learning: {deep_score*100:.1f}%")
+                if pixel_score is not None:
+                    st.progress(pixel_score, text=f"Pixel: {pixel_score*100:.1f}%")
                 
                 # AI Analysis
                 st.subheader("🤖 AI Analysis")
@@ -303,8 +285,8 @@ def main():
                     ai_analysis = get_ai_analysis(
                         image1, 
                         image2, 
-                        ssim_score or 0, 
-                        deep_score or 0
+                        hist_score or 0, 
+                        pixel_score or 0
                     )
                     
                     st.markdown(ai_analysis)
@@ -320,8 +302,8 @@ def main():
                     st.write(f"- โหมดสี: {image2.mode}")
                     
                     st.write("**วิธีการวิเคราะห์:**")
-                    st.write("- SSIM: Structural Similarity Index")
-                    st.write("- Deep Learning: ResNet50 feature extraction + Cosine similarity")
+                    st.write("- Histogram Similarity: เปรียบเทียบการกระจายของสี")
+                    st.write("- Pixel Similarity: เปรียบเทียบค่า pixel โดยตรง")
                     st.write("- AI Analysis: Google Gemini 1.5 Flash")
 
 if __name__ == "__main__":
