@@ -317,7 +317,7 @@ if uploaded_file1 is not None and uploaded_file2 is not None:
                 f"{overall_score:.3f}",
                 f"{overall_score*100:.1f}%"
             )
-        # Progress bars แสดงความเหมือน
+     # Progress bars แสดงความเหมือน
 st.markdown("### 📊 แสดงผลแบบกราฟิก")
 
 # Basic Similarity
