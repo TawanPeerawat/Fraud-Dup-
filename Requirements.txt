@@ -1,4 +1,12 @@
-streamlit
-pillow
-numpy
 google.generativeai
+# Core requirements
+streamlit>=1.28.0
+pillow>=9.5.0
+numpy>=1.24.0
+requests>=2.28.0
+
+# Enhanced image processing for accuracy
+opencv-python-headless>=4.6.0
+scikit-image>=0.19.0
+scipy>=1.9.0
+scikit-learn>=1.1.0
