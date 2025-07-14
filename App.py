@@ -20,10 +20,10 @@ st.markdown("### ตรวจสอบความเหมือนของร
 # ==============================
 try:
     genai.configure(api_key="AIzaSyDhcBaFpk3YqRJtb6kLfQhbJSnGoklha8o")
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    st.success("✅ Gemini API Key successfully configured!")
+    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+    st.success("Gemini API Key successfully configured!")
 except Exception as e:
-    st.error(f"❌ Error setting up the Gemini model: {e}")
+    st.error(f"Error setting up the Gemini model: {e}")
     st.stop()
 
 # ==============================
