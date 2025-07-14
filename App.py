@@ -172,7 +172,7 @@ def main():
     
     # ตรวจสอบ API Key
     if not api_key:
-        st.sidebar.warning("AIzaSyDhcBaFpk3YqRJtb6kLfQhbJSnGoklha8o")
+        st.sidebar.warning("⚠️ กรุณาใส่ Gemini API Key เพื่อใช้งาน AI Analysis")
     else:
         st.sidebar.success("✅ API Key ถูกต้อง")
     
