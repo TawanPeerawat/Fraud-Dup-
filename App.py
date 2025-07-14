@@ -317,27 +317,24 @@ if uploaded_file1 is not None and uploaded_file2 is not None:
                 f"{overall_score:.3f}",
                 f"{overall_score*100:.1f}%"
             )
-        
-        # Progress bars (แทนที่โค้ดเดิมประมาณบรรทัด 320-325)
-        
         # Progress bars แสดงความเหมือน
-        st.markdown("### 📊 แสดงผลแบบกราฟิก")
-        
-        # Basic Similarity
-        st.markdown(f"**🔧 Basic Similarity: {basic_score*100:.1f}%**")
-        st.progress(basic_score)
-        
-        # Color Similarity  
-        st.markdown(f"**🎨 Color Similarity: {color_score*100:.1f}%**")
-        st.progress(color_score)
-        
-        # Histogram Similarity
-        st.markdown(f"**📊 Histogram Similarity: {histogram_score*100:.1f}%**")
-        st.progress(histogram_score)
-        
-        # Overall Score
-        st.markdown(f"**⭐ Overall Score: {overall_score*100:.1f}%**")
-        st.progress(overall_score)
+st.markdown("### 📊 แสดงผลแบบกราฟิก")
+
+# Basic Similarity
+st.markdown(f"**🔧 Basic Similarity: {basic_score*100:.1f}%**")
+st.progress(int(basic_score * 100))
+
+# Color Similarity  
+st.markdown(f"**🎨 Color Similarity: {color_score*100:.1f}%**")
+st.progress(int(color_score * 100))
+
+# Histogram Similarity
+st.markdown(f"**📊 Histogram Similarity: {histogram_score*100:.1f}%**")
+st.progress(int(histogram_score * 100))
+
+# Overall Score
+st.markdown(f"**⭐ Overall Score: {overall_score*100:.1f}%**")
+st.progress(int(overall_score * 100))
         
         # ขั้นตอนที่ 2: การวิเคราะห์ด้วย Gemini AI
         st.subheader("🤖 การวิเคราะห์เชิงลึกโดย Gemini AI")
